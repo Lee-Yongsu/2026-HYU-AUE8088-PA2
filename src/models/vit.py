@@ -144,3 +144,26 @@ class ViT(nn.Module):
 
 def vit_small_patch16_224() -> ViT:
     return ViT(img_size=224, patch_size=16, dim=384, depth=12, num_heads=6)
+
+
+def remap_deit_state_dict(state_dict: dict) -> dict:
+    out: dict = {}
+    for k, v in state_dict.items():
+        if k.startswith("head") or k.startswith("dist_token") or k.startswith("head_dist"):
+            continue
+        k = k.replace("mlp.fc1", "mlp.0").replace("mlp.fc2", "mlp.3")
+        out[k] = v
+    return out
+
+
+def load_pretrained_vit_s16(model: ViT, state_dict: dict) -> tuple[int, list, list]:
+    if "model" in state_dict:
+        state_dict = state_dict["model"]
+    elif "state_dict" in state_dict:
+        state_dict = state_dict["state_dict"]
+
+    remapped = remap_deit_state_dict(state_dict)
+    model_keys = set(model.state_dict().keys())
+    matched = sum(1 for k in remapped if k in model_keys)
+    missing, unexpected = model.load_state_dict(remapped, strict=False)
+    return matched, list(missing), list(unexpected)
